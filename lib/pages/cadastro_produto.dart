@@ -1,18 +1,6 @@
 import 'package:flutter/material.dart';
-
-class Produto {
-  String nome;
-  double valorCusto;
-  double valorVenda;
-  String fornecedor;
-
-  Produto({
-    required this.nome,
-    required this.valorCusto,
-    required this.valorVenda,
-    this.fornecedor = "",
-  });
-}
+import '../models/produto.dart';
+import '../controllers/produto_controller.dart';
 
 class CadastroProdutoPage extends StatefulWidget {
   const CadastroProdutoPage({Key? key}) : super(key: key);
@@ -34,8 +22,30 @@ class _CadastroProdutoPageState extends State<CadastroProdutoPage> {
   final custoController = TextEditingController();
   final vendaController = TextEditingController();
   final fornecedorController = TextEditingController();
-  final List<Produto> produtos = [];
+  final ProdutoController _produtoController = ProdutoController();
+  List<Produto> produtos = [];
   int? selectedRow;
+
+  @override
+  void initState() {
+    super.initState();
+    carregarProdutos();
+  }
+
+  Future<void> carregarProdutos() async {
+    try {
+      final lista = await _produtoController.buscarProdutos();
+      setState(() {
+        produtos = lista;
+      });
+    } catch (e) {
+      print('Erro ao carregar produtos: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Erro ao carregar produtos')));
+      }
+    }
+  }
 
   void limparCampos() {
     nomeController.clear();
@@ -47,55 +57,54 @@ class _CadastroProdutoPageState extends State<CadastroProdutoPage> {
     });
   }
 
-  void salvarProduto() {
-    String nome = nomeController.text.trim();
-    double? valorCusto = double.tryParse(
-      custoController.text.replaceAll(',', '.'),
-    );
-    double? valorVenda = double.tryParse(
-      vendaController.text.replaceAll(',', '.'),
-    );
-    String fornecedor = fornecedorController.text.trim();
-    if (nome.isEmpty || valorCusto == null || valorVenda == null) return;
+  void salvarProduto() async {
+    final nome = nomeController.text.trim();
+    final custo = double.tryParse(custoController.text.replaceAll(',', '.'));
+    final venda = double.tryParse(vendaController.text.replaceAll(',', '.'));
+    final fkFornecedor = int.tryParse(fornecedorController.text.trim());
 
-    setState(() {
-      if (selectedRow == null) {
-        produtos.add(
-          Produto(
-            nome: nome,
-            valorCusto: valorCusto,
-            valorVenda: valorVenda,
-            fornecedor: fornecedor,
-          ),
-        );
-      } else {
-        produtos[selectedRow!] = Produto(
-          nome: nome,
-          valorCusto: valorCusto,
-          valorVenda: valorVenda,
-          fornecedor: fornecedor,
-        );
-      }
+    if (nome.isEmpty || custo == null || venda == null) return;
+
+    final produto = Produto(
+      id: selectedRow == null ? null : produtos[selectedRow!].id,
+      nome: nome,
+      custoUnitario: custo,
+      vlVendaUnitario: venda,
+      fkFornecedor: fkFornecedor,
+    );
+
+    try {
+      await _produtoController.salvarProduto(produto);
+      await carregarProdutos();
       limparCampos();
-    });
+    } catch (e) {
+      print('Erro ao salvar produto: $e');
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Erro ao salvar produto')));
+    }
   }
 
   void editarProduto(int index) {
     final produto = produtos[index];
     nomeController.text = produto.nome;
-    custoController.text = produto.valorCusto.toStringAsFixed(2);
-    vendaController.text = produto.valorVenda.toStringAsFixed(2);
-    fornecedorController.text = produto.fornecedor;
+    custoController.text =
+        (produto.custoUnitario ?? 0).toStringAsFixed(2);
+    vendaController.text =
+        (produto.vlVendaUnitario ?? 0).toStringAsFixed(2);
+    fornecedorController.text =
+        produto.fkFornecedor?.toString() ?? '';
     setState(() {
       selectedRow = index;
     });
   }
 
-  void excluirProduto(int index) {
-    setState(() {
-      produtos.removeAt(index);
+  void excluirProduto(int index) async {
+    final id = produtos[index].id;
+    if (id != null) {
+      await _produtoController.excluirProduto(id);
+      await carregarProdutos();
       limparCampos();
-    });
+    }
   }
 
   @override
@@ -336,7 +345,7 @@ class _CadastroProdutoPageState extends State<CadastroProdutoPage> {
                                           Expanded(
                                             flex: 3,
                                             child: Text(
-                                              'R\$${produto.valorCusto.toStringAsFixed(2)}',
+                                              'R\$${(produto.custoUnitario ?? 0).toStringAsFixed(2)}',
                                               textAlign: TextAlign.center,
                                               style: TextStyle(
                                                 fontSize: 14,
@@ -347,7 +356,7 @@ class _CadastroProdutoPageState extends State<CadastroProdutoPage> {
                                           Expanded(
                                             flex: 3,
                                             child: Text(
-                                              'R\$${produto.valorVenda.toStringAsFixed(2)}',
+                                              'R\$${(produto.vlVendaUnitario ?? 0).toStringAsFixed(2)}',
                                               textAlign: TextAlign.center,
                                               style: TextStyle(
                                                 fontSize: 14,
